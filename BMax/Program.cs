@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
@@ -10,9 +10,6 @@ using System.Runtime.InteropServices;
 namespace BMax {
 	class Program {
 //--------------------------------------------------------------------------------------------
-		[DllImport("user32.dll")]
-		static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
 		[StructLayout(LayoutKind.Sequential)]
 		public struct RECT {
 			public int Left; // x position of upper-left corner
@@ -75,10 +72,11 @@ namespace BMax {
 //--------------------------------------------------------------------------------------------
 		public static List<Game> games = new List<Game>();
 		static void Main(string[] args) {
-			
+
 			if(!ReadConfig(ref games)){
 				Console.Write("Error: config.txt not found!");
 				Console.ReadLine();
+				return;
 			}
 
 			foreach( Game g in games ) {
@@ -91,7 +89,7 @@ namespace BMax {
 				MainLoop();
 			}
 			Console.ReadLine();
-			
+
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
@@ -110,8 +108,8 @@ namespace BMax {
 					g.WindowClass = words[1];
 					games.Add(g);
 				} else if( words.Length == 1 ) {
-					g.WindowClass = words[0];
-					g.Title = "";
+					g.Title = words[0];
+					g.WindowClass = "";
 					games.Add(g);
 				}
 			}
