@@ -6,9 +6,14 @@ using System.IO;
 using System.Runtime;
 using System.Runtime.InteropServices;
 
-
 namespace BMax {
 	class Program {
+//--------------------------------------------------------------------------------------------
+		static bool KEEP_TASKBAR_VISIBLE = true;
+		static int BORDER_LEFT = 0;
+		static int BORDER_RIGHT = 0;
+		static int BORDER_TOP = 0;
+		static int BORDER_BOTTOM = 0;
 //--------------------------------------------------------------------------------------------
 		[StructLayout(LayoutKind.Sequential)]
 		public struct RECT {
@@ -17,6 +22,9 @@ namespace BMax {
 			public int Right; // x position of lower-right corner
 			public int Bottom; // y position of lower-right corner
 		}
+
+		[DllImport("user32.dll")]
+		static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
 		[DllImport("user32.dll", SetLastError = true)]
 		static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -71,25 +79,31 @@ namespace BMax {
 		}
 //--------------------------------------------------------------------------------------------
 		public static List<Game> games = new List<Game>();
+		static int taskBarHeight = 0;
+//--------------------------------------------------------------------------------------------
 		static void Main(string[] args) {
-
 			if(!ReadConfig(ref games)){
 				Console.Write("Error: config.txt not found!");
 				Console.ReadLine();
 				return;
 			}
-
 			foreach( Game g in games ) {
 				DebugPrint("Title: \t\t" + g.Title + "\n");
 				DebugPrint("WindowClass: \t" + g.WindowClass + "\n\n");
 			}
-
+			// Calculate Taskbar height
+			// TODO: Include cases where Taskbar is on other positions than bottom
+			if( KEEP_TASKBAR_VISIBLE ) {
+				IntPtr taskBar = FindWindow("Shell_TrayWnd", "");
+				RECT tr = new RECT();
+				GetWindowRect(taskBar, out tr);
+				taskBarHeight = tr.Bottom - tr.Top;
+			}
 			if( games.Count > 0 ) {
 				DebugPrint("Entering Main Loop...");
 				MainLoop();
 			}
 			Console.ReadLine();
-
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
@@ -149,13 +163,17 @@ namespace BMax {
 			DebugPrint(", Top=" + r.Top.ToString());
 			DebugPrint(", Bottom=" + r.Bottom.ToString());
 
+
 			int ws = GetWindowLong(wHandle, -16);
 			SetWindowLong(wHandle, -16, ws & ~(0x00040000 | 0x00C00000));
-			SetWindowPos(wHandle, (IntPtr)(0), r.Left, r.Top, r.Right, r.Bottom -30 , (SetWindowPosFlags)0x0020);
+
+			if ( KEEP_TASKBAR_VISIBLE )
+				SetWindowPos(wHandle, (IntPtr)(0), r.Left - BORDER_LEFT, r.Top - BORDER_TOP, r.Right - BORDER_RIGHT, r.Bottom - BORDER_BOTTOM - taskBarHeight, (SetWindowPosFlags)0x0020);
+			else
+				SetWindowPos(wHandle, (IntPtr)(0), r.Left - BORDER_LEFT, r.Top - BORDER_TOP, r.Right - BORDER_RIGHT, r.Bottom - BORDER_BOTTOM , (SetWindowPosFlags)0x0020);
 			ShowWindow(wHandle, (ShowWindowCommands)5);
 
 		}
-
 //--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Debug Print
@@ -166,7 +184,7 @@ namespace BMax {
 		#endif
 		}
 	}
-
+//--------------------------------------------------------------------------------------------
 	public class Game {
 		public string Title;
 		public string WindowClass;
