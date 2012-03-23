@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.IO;
+using System.Drawing;
 using System.Runtime;
 using System.Runtime.InteropServices;
 
@@ -79,7 +80,8 @@ namespace BMax {
 		}
 //--------------------------------------------------------------------------------------------
 		public static List<Game> games = new List<Game>();
-		static int taskBarHeight = 0;
+		public static int taskBarHeight = 0;
+		public static Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
 //--------------------------------------------------------------------------------------------
 		static void Main(string[] args) {
 			if(!ReadConfig(ref games)){
@@ -91,14 +93,28 @@ namespace BMax {
 				DebugPrint("Title: \t\t" + g.Title + "\n");
 				DebugPrint("WindowClass: \t" + g.WindowClass + "\n\n");
 			}
-			// Calculate Taskbar height
-			// TODO: Include cases where Taskbar is on other positions than bottom
+
+			// Calculate space to keep the taskbar visible
 			if( KEEP_TASKBAR_VISIBLE ) {
 				IntPtr taskBar = FindWindow("Shell_TrayWnd", "");
 				RECT tr = new RECT();
 				GetWindowRect(taskBar, out tr);
-				taskBarHeight = tr.Bottom - tr.Top;
+
+				if( tr.Left == bounds.Left ) {
+					if( tr.Top == bounds.Top ) {
+						if( tr.Right == bounds.Right ) {
+							BORDER_TOP += tr.Bottom - tr.Top;
+						} else {
+							BORDER_LEFT += tr.Right - tr.Left;
+						}
+					} else {
+						BORDER_BOTTOM += tr.Bottom - tr.Top;
+					}
+				} else {
+					BORDER_RIGHT += tr.Right - tr.Left;
+				}
 			}
+
 			if( games.Count > 0 ) {
 				DebugPrint("Entering Main Loop...");
 				MainLoop();
@@ -151,7 +167,6 @@ namespace BMax {
 		/// Maximize the window
 		/// </summary>
 		static void Maxmize(IntPtr wHandle) {
-			var bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
 			RECT r;
 			r.Left = bounds.Left;
 			r.Right = bounds.Right;
@@ -167,12 +182,13 @@ namespace BMax {
 			int ws = GetWindowLong(wHandle, -16);
 			SetWindowLong(wHandle, -16, ws & ~(0x00040000 | 0x00C00000));
 
-			if ( KEEP_TASKBAR_VISIBLE )
-				SetWindowPos(wHandle, (IntPtr)(0), r.Left - BORDER_LEFT, r.Top - BORDER_TOP, r.Right - BORDER_RIGHT, r.Bottom - BORDER_BOTTOM - taskBarHeight, (SetWindowPosFlags)0x0020);
-			else
-				SetWindowPos(wHandle, (IntPtr)(0), r.Left - BORDER_LEFT, r.Top - BORDER_TOP, r.Right - BORDER_RIGHT, r.Bottom - BORDER_BOTTOM , (SetWindowPosFlags)0x0020);
-			ShowWindow(wHandle, (ShowWindowCommands)5);
+			SetWindowPos(wHandle, (IntPtr)(0), r.Left + BORDER_LEFT,
+												r.Top + BORDER_TOP,
+												r.Right - BORDER_RIGHT - BORDER_LEFT,
+												r.Bottom - BORDER_BOTTOM - BORDER_TOP,
+												(SetWindowPosFlags)0x0020);
 
+			ShowWindow(wHandle, (ShowWindowCommands)5);
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
