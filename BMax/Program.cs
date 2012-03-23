@@ -16,8 +16,12 @@ namespace BMax {
 		static int BORDER_TOP = 0;
 		static int BORDER_BOTTOM = 0;
 //--------------------------------------------------------------------------------------------
+		static List<App> apps = new List<App>();
+		static int taskBarHeight = 0;
+		static Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+//--------------------------------------------------------------------------------------------
 		[StructLayout(LayoutKind.Sequential)]
-		public struct RECT {
+		struct RECT {
 			public int Left; // x position of upper-left corner
 			public int Top; // y position of upper-left corner
 			public int Right; // x position of lower-right corner
@@ -45,7 +49,7 @@ namespace BMax {
 		static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
 		[Flags()]
-		private enum SetWindowPosFlags : uint {
+		enum SetWindowPosFlags : uint {
 			SynchronousWindowPosition = 0x4000,
 			DeferErase = 0x2000,
 			DrawFrame = 0x0020,
@@ -79,19 +83,16 @@ namespace BMax {
 			ForceMinimize = 11
 		}
 //--------------------------------------------------------------------------------------------
-		public static List<Game> games = new List<Game>();
-		public static int taskBarHeight = 0;
-		public static Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
-//--------------------------------------------------------------------------------------------
 		static void Main(string[] args) {
-			if(!ReadConfig(ref games)){
+			if(!ReadConfig(ref apps)){
 				Console.Write("Error: config.txt not found!");
 				Console.ReadLine();
 				return;
 			}
-			foreach( Game g in games ) {
-				DebugPrint("Title: \t\t" + g.Title + "\n");
-				DebugPrint("WindowClass: \t" + g.WindowClass + "\n\n");
+
+			foreach( App a in apps ) {
+				DebugPrint("Title: \t\t" + a.Title + "\n");
+				DebugPrint("WindowClass: \t" + a.WindowClass + "\n\n");
 			}
 
 			// Calculate space to keep the taskbar visible
@@ -115,24 +116,23 @@ namespace BMax {
 				}
 			}
 
-			if( games.Count > 0 ) {
+			if( apps.Count > 0 ) {
 				DebugPrint("Entering Main Loop...");
 				MainLoop();
 			}
-			Console.ReadLine();
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Read the configuration from config.txt
 		/// </summary>
-		static bool ReadConfig(ref List<Game> games) {
+		static bool ReadConfig(ref List<App> games) {
 			string[] lines = File.ReadAllLines("config.txt");
 			if( lines[0] == null )
 				return false;
 			foreach( string line in lines ) {
 				if( line.StartsWith("#") ) continue; //ignore comments
 				string[] words = line.Split(',');
-				Game g = new Game();
+				App g = new App();
 				if( words.Length > 1 ) {
 					g.Title = words[0];
 					g.WindowClass = words[1];
@@ -152,7 +152,7 @@ namespace BMax {
 		static void MainLoop() {
 			IntPtr wHandle = (IntPtr)0;
 			while( true ) {
-				foreach( Game g in games ) {
+				foreach( App g in apps ) {
 					wHandle = FindWindow(g.WindowClass, g.Title);
 					if( wHandle != (IntPtr)0 ) {
 						DebugPrint("\nFound: " + g.WindowClass + ", HWND=" + wHandle.ToString());
@@ -172,12 +172,6 @@ namespace BMax {
 			r.Right = bounds.Right;
 			r.Top = bounds.Top;
 			r.Bottom = bounds.Bottom;
-
-			DebugPrint(" Left=" + r.Left.ToString());
-			DebugPrint(", Right=" + r.Right.ToString());
-			DebugPrint(", Top=" + r.Top.ToString());
-			DebugPrint(", Bottom=" + r.Bottom.ToString());
-
 
 			int ws = GetWindowLong(wHandle, -16);
 			SetWindowLong(wHandle, -16, ws & ~(0x00040000 | 0x00C00000));
@@ -201,7 +195,7 @@ namespace BMax {
 		}
 	}
 //--------------------------------------------------------------------------------------------
-	public class Game {
+	public class App {
 		public string Title;
 		public string WindowClass;
 	}
