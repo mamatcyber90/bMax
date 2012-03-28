@@ -6,9 +6,15 @@ using System.IO;
 using System.Drawing;
 using System.Runtime;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 
 namespace BMax {
-	class Program {
+	public class BMaxApp : Form {
+		[STAThread]
+		static void Main() {
+			Application.EnableVisualStyles();
+			Application.Run(new BMaxApp());
+		}
 //--------------------------------------------------------------------------------------------
 		static bool KEEP_TASKBAR_VISIBLE = true;
 		static int BORDER_LEFT = 0;
@@ -17,8 +23,10 @@ namespace BMax {
 		static int BORDER_BOTTOM = 0;
 //--------------------------------------------------------------------------------------------
 		static List<App> apps = new List<App>();
-		static int taskBarHeight = 0;
 		static Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+		static NotifyIcon trayIcon;
+		static ContextMenu trayMenu;
+		static Thread workerThread;
 //--------------------------------------------------------------------------------------------
 		[StructLayout(LayoutKind.Sequential)]
 		struct RECT {
@@ -83,12 +91,29 @@ namespace BMax {
 			ForceMinimize = 11
 		}
 //--------------------------------------------------------------------------------------------
-		static void Main(string[] args) {
-			if(!ReadConfig(ref apps)){
-				Console.Write("Error: config.txt not found!");
-				Console.ReadLine();
-				return;
-			}
+		protected override void OnLoad(EventArgs e) {
+			Visible = false;
+			ShowInTaskbar = false;
+			base.OnLoad(e);
+		}
+//--------------------------------------------------------------------------------------------
+		protected override void Dispose(bool isDisposing) {
+			if( isDisposing )
+				trayIcon.Dispose();
+			base.Dispose(isDisposing);
+		}
+//--------------------------------------------------------------------------------------------
+		private BMaxApp() {
+			trayMenu = new ContextMenu();
+			trayMenu.MenuItems.Add("E&xit", Exit);
+
+			trayIcon = new NotifyIcon();
+			trayIcon.Text = "BMax";
+			trayIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+			trayIcon.ContextMenu = trayMenu;
+			trayIcon.Visible = true;
+
+			ReadConfig(ref apps);
 
 			foreach( App a in apps ) {
 				DebugPrint("Title: \t\t" + a.Title + "\n");
@@ -118,17 +143,46 @@ namespace BMax {
 
 			if( apps.Count > 0 ) {
 				DebugPrint("Entering Main Loop...");
-				MainLoop();
+				workerThread = new Thread(MainLoop);
+				workerThread.Start();
+			} else {
+				Console.WriteLine("No apps to maximize found, exiting...");
+				Console.ReadLine();
+				Application.Exit();
 			}
+		}
+//--------------------------------------------------------------------------------------------
+		private void Exit(object sender, EventArgs e) {
+			workerThread.Abort();
+			Application.Exit();
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Read the configuration from config.txt
 		/// </summary>
-		static bool ReadConfig(ref List<App> games) {
-			string[] lines = File.ReadAllLines("config.txt");
-			if( lines[0] == null )
-				return false;
+		private static bool ReadConfig(ref List<App> apps) {
+			string file = "config.txt";
+
+			//write default config if no config exists
+			if( !File.Exists(file) ) {
+				string[] defaultCfg = {
+					"# BMax configuration file",
+					"# -----------------------",
+					"#",
+					"# Comment lines start with a hash symbol. To specifiy an application to",
+					"# be maximized, enter the exact window title, followed by a comma and the",
+					"# optional, but recommended, WindowClass.",
+					"Diablo III,D3 Main Window Class",
+					"Minecraft Launcher,SunAwtFrame",
+					"# You can also specify Windows without the WindowClass, but this can lead",
+					"# to false positives. The comma is omitted in this case.",
+					"Warcraft III",
+				};
+				File.WriteAllLines(file, defaultCfg);
+			}
+
+			// read config
+			string[] lines = File.ReadAllLines(file);
 			foreach( string line in lines ) {
 				if( line.StartsWith("#") ) continue; //ignore comments
 				string[] words = line.Split(',');
@@ -136,11 +190,11 @@ namespace BMax {
 				if( words.Length > 1 ) {
 					g.Title = words[0];
 					g.WindowClass = words[1];
-					games.Add(g);
+					apps.Add(g);
 				} else if( words.Length == 1 ) {
 					g.Title = words[0];
 					g.WindowClass = "";
-					games.Add(g);
+					apps.Add(g);
 				}
 			}
 			return true;
@@ -149,7 +203,7 @@ namespace BMax {
 		/// <summary>
 		/// Periodically look windows with a matching title/window class and maximize them
 		/// </summary>
-		static void MainLoop() {
+		private static void MainLoop() {
 			IntPtr wHandle = (IntPtr)0;
 			while( true ) {
 				foreach( App g in apps ) {
@@ -166,7 +220,7 @@ namespace BMax {
 		/// <summary>
 		/// Maximize the window
 		/// </summary>
-		static void Maxmize(IntPtr wHandle) {
+		private static void Maxmize(IntPtr wHandle) {
 			RECT r;
 			r.Left = bounds.Left;
 			r.Right = bounds.Right;
@@ -188,7 +242,7 @@ namespace BMax {
 		/// <summary>
 		/// Debug Print
 		/// </summary>
-		static void DebugPrint(string s) {
+		private static void DebugPrint(string s) {
 		#if DEBUG
 			Console.Write(s);
 		#endif
