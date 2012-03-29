@@ -15,20 +15,20 @@ namespace BMax {
 			Application.EnableVisualStyles();
 			Application.Run(new BMaxApp());
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		static bool KEEP_TASKBAR_VISIBLE = true;
 		static int BORDER_LEFT = 0;
 		static int BORDER_RIGHT = 0;
 		static int BORDER_TOP = 0;
 		static int BORDER_BOTTOM = 0;
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		static List<Window> cWindows = new List<Window>();
 		static Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
 		static NotifyIcon trayIcon;
 		static ContextMenuStrip trayMenu;
 		static ToolStripMenuItem windowList;
 		static Thread workerThread;
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		[StructLayout(LayoutKind.Sequential)]
 		struct RECT {
 			public int Left; // x position of upper-left corner
@@ -91,7 +91,7 @@ namespace BMax {
 			ShowDefault = 10,
 			ForceMinimize = 11
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Hide the main form of the Application when loading
 		/// </summary>
@@ -101,7 +101,7 @@ namespace BMax {
 			ShowInTaskbar = false;
 			base.OnLoad(e);
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Dispose the tray icon
 		/// </summary>
@@ -111,7 +111,7 @@ namespace BMax {
 				trayIcon.Dispose();
 			base.Dispose(isDisposing);
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Main entry point. Creates the tray icon, processes the options and starts the maximizing worker thread.
 		/// </summary>
@@ -158,7 +158,7 @@ namespace BMax {
 			workerThread = new Thread(MainLoop);
 			workerThread.Start();
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Exit the application and close all threads
 		/// </summary>
@@ -168,7 +168,7 @@ namespace BMax {
 			workerThread.Abort();
 			Application.Exit();
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Populate the dropdown with entries for all current active windows
 		/// </summary>
@@ -182,7 +182,7 @@ namespace BMax {
 				windowList.DropDown.ItemClicked += new ToolStripItemClickedEventHandler(DropDownClick);
 			}
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Maximize the selected Window
 		/// </summary>
@@ -193,7 +193,7 @@ namespace BMax {
 			string wTitle = e.ClickedItem.Text;
 			Maximize((IntPtr)0, wTitle, wClass);
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Read the configuration from config.txt
 		/// </summary>
@@ -238,7 +238,7 @@ namespace BMax {
 			}
 			return;
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Periodically look windows with a matching title/window class and maximize them
 		/// </summary>
@@ -254,7 +254,7 @@ namespace BMax {
 				Thread.Sleep(1000);
 			}
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Maximize the window
 		/// </summary>
@@ -283,7 +283,7 @@ namespace BMax {
 
 			ShowWindow(wHandle, (ShowWindowCommands)5);
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Helper Class
 		/// </summary>
@@ -292,7 +292,7 @@ namespace BMax {
 			public string Title;
 			public string WindowClass;
 		}
-		//--------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Helper Class to get the list of all active Windows
 		/// </summary>
