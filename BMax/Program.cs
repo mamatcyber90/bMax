@@ -9,6 +9,14 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace BMax {
+	[StructLayout(LayoutKind.Sequential)]
+	public struct RECT {
+		public int Left; // x position of upper-left corner
+		public int Top; // y position of upper-left corner
+		public int Right; // x position of lower-right corner
+		public int Bottom; // y position of lower-right corner
+	}
+
 	public class BMaxApp : Form {
 		[STAThread]
 		static void Main() {
@@ -23,20 +31,15 @@ namespace BMax {
 		static int BORDER_BOTTOM = 0;
 //--------------------------------------------------------------------------------------------
 		static List<Window> cWindows = new List<Window>();
+		static List<WindowData> savedWindows = new List<WindowData>();
 		static Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
 		static NotifyIcon trayIcon;
 		static ContextMenuStrip trayMenu;
 		static ToolStripMenuItem windowList;
+/*
 		static Thread workerThread;
+*/
 //--------------------------------------------------------------------------------------------
-		[StructLayout(LayoutKind.Sequential)]
-		struct RECT {
-			public int Left; // x position of upper-left corner
-			public int Top; // y position of upper-left corner
-			public int Right; // x position of lower-right corner
-			public int Bottom; // y position of lower-right corner
-		}
-
 		[DllImport("user32.dll")]
 		static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
@@ -93,32 +96,13 @@ namespace BMax {
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
-		/// Hide the main form of the Application when loading
-		/// </summary>
-		/// <param name="e"></param>
-		protected override void OnLoad(EventArgs e) {
-			Visible = false;
-			ShowInTaskbar = false;
-			base.OnLoad(e);
-		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Dispose the tray icon
-		/// </summary>
-		/// <param name="isDisposing"></param>
-		protected override void Dispose(bool isDisposing) {
-			if( isDisposing )
-				trayIcon.Dispose();
-			base.Dispose(isDisposing);
-		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
 		/// Main entry point. Creates the tray icon, processes the options and starts the maximizing worker thread.
 		/// </summary>
 		private BMaxApp() {
 			trayMenu = new ContextMenuStrip();
 			windowList = new ToolStripMenuItem("&Active Windows");
 			windowList.DropDownItems.Add("");
+			windowList.DropDown.ItemClicked += new ToolStripItemClickedEventHandler(DropDownClick);
 			trayMenu.Items.Add(windowList);
 			trayMenu.Items.Add("-", null);
 			trayMenu.Items.Add("&Exit", null);
@@ -131,9 +115,9 @@ namespace BMax {
 			trayIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 			trayIcon.ContextMenuStrip = trayMenu;
 			trayIcon.Visible = true;
-
+/*
 			ReadConfig(ref cWindows);
-
+*/
 			// Calculate space to keep the taskbar visible
 			if( KEEP_TASKBAR_VISIBLE ) {
 				IntPtr taskBar = FindWindow("Shell_TrayWnd", "");
@@ -155,18 +139,8 @@ namespace BMax {
 				}
 			}
 
-			workerThread = new Thread(MainLoop);
-			workerThread.Start();
-		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Exit the application and close all threads
-		/// </summary>
-		/// <param name="sender"></param>
-		/// <param name="e"></param>
-		private void Exit(object sender, EventArgs e) {
-			workerThread.Abort();
-			Application.Exit();
+			//workerThread = new Thread(MainLoop);
+			//workerThread.Start();
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
@@ -179,7 +153,6 @@ namespace BMax {
 			foreach( Window w in GetActiveWindows.Get() ) {
 				windowList.DropDownItems.Add(w.Title);
 				windowList.DropDownItems[windowList.DropDownItems.Count - 1].ToolTipText = w.WindowClass;
-				windowList.DropDown.ItemClicked += new ToolStripItemClickedEventHandler(DropDownClick);
 			}
 		}
 //--------------------------------------------------------------------------------------------
@@ -198,6 +171,7 @@ namespace BMax {
 		/// Read the configuration from config.txt
 		/// </summary>
 		/// <param name="cWindows">List of configured Windows</param>
+/*
 		private static void ReadConfig(ref List<Window> cWindows) {
 			string file = "config.txt";
 
@@ -238,10 +212,13 @@ namespace BMax {
 			}
 			return;
 		}
+*/
 //--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Periodically look windows with a matching title/window class and maximize them
 		/// </summary>
+		///
+/*
 		private static void MainLoop() {
 			IntPtr wHandle = (IntPtr)0;
 			while( true ) {
@@ -254,6 +231,7 @@ namespace BMax {
 				Thread.Sleep(1000);
 			}
 		}
+*/
 //--------------------------------------------------------------------------------------------
 		/// <summary>
 		/// Maximize the window
@@ -262,26 +240,87 @@ namespace BMax {
 		/// <param name="wTitle">optional Window Title</param>
 		/// <param name="wClass">optional Window Class</param>
 		private static void Maximize(IntPtr wHandle, string wTitle = "", string wClass = "") {
-
-			if( wTitle != "" && wClass != "" )
-				wHandle = FindWindow(wClass, wTitle);
-
+			if( wTitle != "" && wClass != "" ) wHandle = FindWindow(wClass, wTitle);
 			RECT r;
 			r.Left = bounds.Left;
 			r.Right = bounds.Right;
 			r.Top = bounds.Top;
 			r.Bottom = bounds.Bottom;
+			int wStyle = GetWindowLong(wHandle, -16);
+			bool isMaximized = false;
+			int index = 0;
+			foreach( WindowData wd in savedWindows ) {
+				if( wd.handle == wHandle ) {
+					isMaximized = true;
+					break;
+				}
+				++index;
+			}
 
-			int ws = GetWindowLong(wHandle, -16);
-			SetWindowLong(wHandle, -16, ws & ~(0x00040000 | 0x00C00000));
+			if( !isMaximized ) {
+				//save data for restoration
+				RECT wRect;
+				GetWindowRect(wHandle, out wRect);
+				WindowData w = new WindowData();
+				w.handle = wHandle;
+				w.windowPos = wRect;
+				w.windowStyle = wStyle;
+				savedWindows.Add(w);
+				//set style
+				SetWindowLong(wHandle, -16, wStyle & ~(0x00040000 | 0x00C00000));
+				//maximize
+				SetWindowPos(wHandle, (IntPtr)(0),
+					r.Left + BORDER_LEFT,
+					r.Top + BORDER_TOP,
+					r.Right - BORDER_RIGHT - BORDER_LEFT,
+					r.Bottom - BORDER_BOTTOM - BORDER_TOP,
+					(SetWindowPosFlags)0x0020);
 
-			SetWindowPos(wHandle, (IntPtr)(0), r.Left + BORDER_LEFT,
-												r.Top + BORDER_TOP,
-												r.Right - BORDER_RIGHT - BORDER_LEFT,
-												r.Bottom - BORDER_BOTTOM - BORDER_TOP,
-												(SetWindowPosFlags)0x0020);
+				ShowWindow(wHandle, (ShowWindowCommands)5);
+			} else {
+				//restore style
+				SetWindowLong(wHandle, -16, savedWindows[index].windowStyle);
+				//restore position
+				SetWindowPos(wHandle, (IntPtr)(0),
+					savedWindows[index].windowPos.Left,
+					savedWindows[index].windowPos.Top,
+					savedWindows[index].windowPos.Right - savedWindows[index].windowPos.Left,
+					savedWindows[index].windowPos.Bottom - savedWindows[index].windowPos.Top,
+					(SetWindowPosFlags)0x0020);
 
-			ShowWindow(wHandle, (ShowWindowCommands)5);
+				ShowWindow(wHandle, (ShowWindowCommands)5);
+				savedWindows.RemoveAt(index);
+			}
+		}
+//--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Hide the main form of the Application when loading
+		/// </summary>
+		/// <param name="e"></param>
+		protected override void OnLoad(EventArgs e) {
+			Visible = false;
+			ShowInTaskbar = false;
+			base.OnLoad(e);
+		}
+//--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Dispose the tray icon
+		/// </summary>
+		/// <param name="isDisposing"></param>
+		protected override void Dispose(bool isDisposing) {
+			if( isDisposing )
+				trayIcon.Dispose();
+			base.Dispose(isDisposing);
+		}
+//--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Exit the application and close all threads
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e"></param>
+		private void Exit(object sender, EventArgs e) {
+			//workerThread.Abort();
+			Application.Exit();
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
@@ -291,6 +330,12 @@ namespace BMax {
 			public IntPtr handle;
 			public string Title;
 			public string WindowClass;
+		}
+
+		public class WindowData {
+			public IntPtr handle;
+			public int windowStyle;
+			public RECT windowPos;
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
