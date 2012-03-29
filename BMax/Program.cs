@@ -25,7 +25,8 @@ namespace BMax {
 		static List<App> apps = new List<App>();
 		static Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
 		static NotifyIcon trayIcon;
-		static ContextMenu trayMenu;
+		static ContextMenuStrip trayMenu;
+		static ToolStripMenuItem appList;
 		static Thread workerThread;
 //--------------------------------------------------------------------------------------------
 		[StructLayout(LayoutKind.Sequential)]
@@ -91,34 +92,47 @@ namespace BMax {
 			ForceMinimize = 11
 		}
 //--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Hide the main form of the Application when loading
+		/// </summary>
+		/// <param name="e"></param>
 		protected override void OnLoad(EventArgs e) {
 			Visible = false;
 			ShowInTaskbar = false;
 			base.OnLoad(e);
 		}
 //--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Dispose the tray icon
+		/// </summary>
+		/// <param name="isDisposing"></param>
 		protected override void Dispose(bool isDisposing) {
 			if( isDisposing )
 				trayIcon.Dispose();
 			base.Dispose(isDisposing);
 		}
 //--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Main entry point. Creates the tray icon, processes the options and starts the maximizing worker thread.
+		/// </summary>
 		private BMaxApp() {
-			trayMenu = new ContextMenu();
-			trayMenu.MenuItems.Add("E&xit", Exit);
+			trayMenu = new ContextMenuStrip();
+			appList = new ToolStripMenuItem("&Active Windows");
+			appList.DropDownItems.Add("");
+			trayMenu.Items.Add(appList);
+			trayMenu.Items.Add("-", null);
+			trayMenu.Items.Add("&Exit", null);
+
+			trayMenu.Items[0].MouseEnter += new EventHandler(ListApps);
+			trayMenu.Items[2].Click += new EventHandler(Exit);
 
 			trayIcon = new NotifyIcon();
 			trayIcon.Text = "BMax";
 			trayIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-			trayIcon.ContextMenu = trayMenu;
+			trayIcon.ContextMenuStrip = trayMenu;
 			trayIcon.Visible = true;
 
 			ReadConfig(ref apps);
-
-			foreach( App a in apps ) {
-				DebugPrint("Title: \t\t" + a.Title + "\n");
-				DebugPrint("WindowClass: \t" + a.WindowClass + "\n\n");
-			}
 
 			// Calculate space to keep the taskbar visible
 			if( KEEP_TASKBAR_VISIBLE ) {
@@ -141,26 +155,50 @@ namespace BMax {
 				}
 			}
 
-			if( apps.Count > 0 ) {
-				DebugPrint("Entering Main Loop...");
-				workerThread = new Thread(MainLoop);
-				workerThread.Start();
-			} else {
-				Console.WriteLine("No apps to maximize found, exiting...");
-				Console.ReadLine();
-				Application.Exit();
-			}
+			workerThread = new Thread(MainLoop);
+			workerThread.Start();
 		}
 //--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Exit the application and close all threads
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e"></param>
 		private void Exit(object sender, EventArgs e) {
 			workerThread.Abort();
 			Application.Exit();
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
+		/// Populate the dropdown with entries for all current active windows
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e"></param>
+		private void ListApps(object sender, EventArgs e) {
+			appList.DropDownItems.Clear();
+			foreach( ActiveWindows w in  GetActiveWindows.Get() ) {
+				appList.DropDownItems.Add(w.Title);
+				appList.DropDownItems[appList.DropDownItems.Count - 1].ToolTipText = w.WindowClass;
+				appList.DropDown.ItemClicked += new ToolStripItemClickedEventHandler(DropDownClick);
+			}
+		}
+//--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Maximize the selected Window
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e"></param>
+		private void DropDownClick(object sender, ToolStripItemClickedEventArgs e) {
+			string wClass = e.ClickedItem.ToolTipText;
+			string wTitle = e.ClickedItem.Text;
+			Maximize((IntPtr)0, wTitle, wClass);
+		}
+//--------------------------------------------------------------------------------------------
+		/// <summary>
 		/// Read the configuration from config.txt
 		/// </summary>
-		private static bool ReadConfig(ref List<App> apps) {
+		/// <param name="apps"></param>
+		private static void ReadConfig(ref List<App> apps) {
 			string file = "config.txt";
 
 			//write default config if no config exists
@@ -197,7 +235,7 @@ namespace BMax {
 					apps.Add(g);
 				}
 			}
-			return true;
+			return;
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
@@ -209,8 +247,7 @@ namespace BMax {
 				foreach( App g in apps ) {
 					wHandle = FindWindow(g.WindowClass, g.Title);
 					if( wHandle != (IntPtr)0 ) {
-						DebugPrint("\nFound: " + g.WindowClass + ", HWND=" + wHandle.ToString());
-						Maxmize(wHandle);
+						Maximize(wHandle);
 					}
 				}
 				Thread.Sleep(1000);
@@ -220,17 +257,23 @@ namespace BMax {
 		/// <summary>
 		/// Maximize the window
 		/// </summary>
-		private static void Maxmize(IntPtr wHandle) {
+		/// <param name="wHandle">the HWND of the window</param>
+		/// <param name="wTitle">optional Window Title</param>
+		/// <param name="wClass">optional Window Class</param>
+		private static void Maximize(IntPtr wHandle, string wTitle = "", string wClass = "") {
+
+			if( wTitle != "" && wClass != "" ) wHandle = FindWindow(wClass, wTitle);
+
 			RECT r;
-			r.Left = bounds.Left;
-			r.Right = bounds.Right;
-			r.Top = bounds.Top;
-			r.Bottom = bounds.Bottom;
+			r.Left		= bounds.Left;
+			r.Right		= bounds.Right;
+			r.Top		= bounds.Top;
+			r.Bottom	= bounds.Bottom;
 
 			int ws = GetWindowLong(wHandle, -16);
 			SetWindowLong(wHandle, -16, ws & ~(0x00040000 | 0x00C00000));
 
-			SetWindowPos(wHandle, (IntPtr)(0), r.Left + BORDER_LEFT,
+			SetWindowPos(wHandle, (IntPtr)(0),	r.Left + BORDER_LEFT,
 												r.Top + BORDER_TOP,
 												r.Right - BORDER_RIGHT - BORDER_LEFT,
 												r.Bottom - BORDER_BOTTOM - BORDER_TOP,
@@ -239,18 +282,69 @@ namespace BMax {
 			ShowWindow(wHandle, (ShowWindowCommands)5);
 		}
 //--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Debug Print
-		/// </summary>
-		private static void DebugPrint(string s) {
-		#if DEBUG
-			Console.Write(s);
-		#endif
-		}
-	}
-//--------------------------------------------------------------------------------------------
+	/// <summary>
+	/// Helper Classes
+	/// </summary>
 	public class App {
 		public string Title;
 		public string WindowClass;
+	}
+
+	public class ActiveWindows {
+		public IntPtr handle;
+		public string Title;
+		public string WindowClass;
+	}
+//--------------------------------------------------------------------------------------------
+	/// <summary>
+	/// Helper Class to get the list of all active Windows
+	/// </summary>
+	public static class GetActiveWindows {
+		delegate bool EnumWindowsProc(IntPtr hWnd, int lParam);
+
+		[DllImport("user32.dll")]
+		static extern bool EnumWindows(EnumWindowsProc enumFunc, int lParam);
+
+		[DllImport("user32.dll")]
+		static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+		[DllImport("user32.dll")]
+		static extern int GetWindowTextLength(IntPtr hWnd);
+
+		[DllImport("user32.dll")]
+		static extern bool IsWindowVisible(IntPtr hWnd);
+
+		[DllImport("user32.dll")]
+		static extern IntPtr GetShellWindow();
+
+		[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+		static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+		public static List<ActiveWindows> Get() {
+			IntPtr lShellWindow = GetShellWindow();
+			List<ActiveWindows> windows = new List<ActiveWindows>();
+			
+			EnumWindows(delegate(IntPtr hWnd, int lParam) {
+				if (hWnd == lShellWindow) return true;
+				if (!IsWindowVisible(hWnd)) return true;
+
+				int lLength = GetWindowTextLength(hWnd);
+				if (lLength == 0) return true;
+
+				StringBuilder WindowTitle = new StringBuilder(lLength);
+				GetWindowText(hWnd, WindowTitle, lLength + 1);
+
+				StringBuilder ClassName = new StringBuilder(256);
+				GetClassName(hWnd, ClassName, ClassName.Capacity);
+
+				ActiveWindows win = new ActiveWindows();
+				win.handle		= hWnd;
+				win.Title		= WindowTitle.ToString();
+				win.WindowClass	= ClassName.ToString();
+				windows.Add(win);
+				return true;
+			}, 0);
+			return windows;
+		}
 	}
 }
