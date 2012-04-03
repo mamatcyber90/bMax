@@ -9,14 +9,6 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace BMax {
-	[StructLayout(LayoutKind.Sequential)]
-	public struct RECT {
-		public int Left; // x position of upper-left corner
-		public int Top; // y position of upper-left corner
-		public int Right; // x position of lower-right corner
-		public int Bottom; // y position of lower-right corner
-	}
-
 	public class BMaxApp : Form {
 		[STAThread]
 		static void Main() {
@@ -24,18 +16,27 @@ namespace BMax {
 			Application.Run(new BMaxApp());
 		}
 //--------------------------------------------------------------------------------------------
-		static bool KEEP_TASKBAR_VISIBLE = true;
-		static int BORDER_LEFT = 0;
-		static int BORDER_RIGHT = 0;
-		static int BORDER_TOP = 0;
-		static int BORDER_BOTTOM = 0;
+		[StructLayout(LayoutKind.Sequential)]
+		public struct RECT {
+			public int Left; // x position of upper-left corner
+			public int Top; // y position of upper-left corner
+			public int Right; // x position of lower-right corner
+			public int Bottom; // y position of lower-right corner
+		}
 //--------------------------------------------------------------------------------------------
+		static bool CFG_KEEP_TASKBAR_VISIBLE = true;
+		static int CFG_BORDER_LEFT = 0;
+		static int CFG_BORDER_RIGHT = 0;
+		static int CFG_BORDER_TOP = 0;
+		static int CFG_BORDER_BOTTOM = 0;
+//--------------------------------------------------------------------------------------------
+		static int BORDER_LEFT, BORDER_RIGHT, BORDER_TOP, BORDER_BOTTOM;
 		static List<Window> cWindows = new List<Window>();
 		static List<WindowData> savedWindows = new List<WindowData>();
 		static Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
 		static NotifyIcon trayIcon;
 		static ContextMenuStrip trayMenu;
-		static ToolStripMenuItem windowList;
+		static ToolStripMenuItem windowList, chkTaskbar;
 /*
 		static Thread workerThread;
 */
@@ -99,27 +100,85 @@ namespace BMax {
 		/// Main entry point. Creates the tray icon, processes the options and starts the maximizing worker thread.
 		/// </summary>
 		private BMaxApp() {
+/*
+			ReadConfig(ref cWindows);
+*/
+			CreateIconAndMenus();
+			CalculateBorders();
+			//workerThread = new Thread(MainLoop);
+			//workerThread.Start();
+		}
+//--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Create the systray icon and it's menu
+		/// </summary>
+		private void CreateIconAndMenus() {
 			trayMenu = new ContextMenuStrip();
+
 			windowList = new ToolStripMenuItem("&Active Windows");
 			windowList.DropDownItems.Add("");
 			windowList.DropDown.ItemClicked += new ToolStripItemClickedEventHandler(DropDownClick);
 			trayMenu.Items.Add(windowList);
+			trayMenu.Items[0].MouseEnter += new EventHandler(PopulateWindowList);
+
+			chkTaskbar = new ToolStripMenuItem("&Keep Taskbar visible");
+			chkTaskbar.Checked = CFG_KEEP_TASKBAR_VISIBLE;
+			chkTaskbar.CheckOnClick = true;
+			chkTaskbar.CheckedChanged += new EventHandler(ToggleTaskbar);
+			trayMenu.Items.Add(chkTaskbar);
+
 			trayMenu.Items.Add("-", null);
 			trayMenu.Items.Add("&Exit", null);
 
-			trayMenu.Items[0].MouseEnter += new EventHandler(PopulateWindowList);
-			trayMenu.Items[2].Click += new EventHandler(Exit);
+			trayMenu.Items[3].Click += new EventHandler(Exit);
 
 			trayIcon = new NotifyIcon();
 			trayIcon.Text = "BMax";
 			trayIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 			trayIcon.ContextMenuStrip = trayMenu;
 			trayIcon.Visible = true;
-/*
-			ReadConfig(ref cWindows);
-*/
-			// Calculate space to keep the taskbar visible
-			if( KEEP_TASKBAR_VISIBLE ) {
+		}
+//--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Populate the dropdown with entries for all current active windows
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e"></param>
+		private void PopulateWindowList(object sender, EventArgs e) {
+			windowList.DropDownItems.Clear();
+			foreach( Window w in GetActiveWindows.Get() ) {
+				windowList.DropDownItems.Add(w.Title);
+				windowList.DropDownItems[windowList.DropDownItems.Count - 1].ToolTipText = w.WindowClass;
+			}
+		}
+
+		private void ToggleTaskbar(object sender, EventArgs e) {
+			CFG_KEEP_TASKBAR_VISIBLE = chkTaskbar.Checked;
+			CalculateBorders();
+		}
+//--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Maximize the selected Window
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e"></param>
+		private void DropDownClick(object sender, ToolStripItemClickedEventArgs e) {
+			string wClass = e.ClickedItem.ToolTipText;
+			string wTitle = e.ClickedItem.Text;
+			Maximize((IntPtr)0, wTitle, wClass);
+		}
+//--------------------------------------------------------------------------------------------
+		/// <summary>
+		/// Calculate space to keep the taskbar visible
+		/// </summary>
+		private void CalculateBorders() {
+
+			BORDER_LEFT = CFG_BORDER_LEFT;
+			BORDER_RIGHT = CFG_BORDER_RIGHT;
+			BORDER_TOP = CFG_BORDER_TOP;
+			BORDER_BOTTOM = CFG_BORDER_BOTTOM;
+
+			if( CFG_KEEP_TASKBAR_VISIBLE ) {
 				IntPtr taskBar = FindWindow("Shell_TrayWnd", "");
 				RECT tr = new RECT();
 				GetWindowRect(taskBar, out tr);
@@ -138,33 +197,6 @@ namespace BMax {
 					BORDER_RIGHT += tr.Right - tr.Left;
 				}
 			}
-
-			//workerThread = new Thread(MainLoop);
-			//workerThread.Start();
-		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Populate the dropdown with entries for all current active windows
-		/// </summary>
-		/// <param name="sender"></param>
-		/// <param name="e"></param>
-		private void PopulateWindowList(object sender, EventArgs e) {
-			windowList.DropDownItems.Clear();
-			foreach( Window w in GetActiveWindows.Get() ) {
-				windowList.DropDownItems.Add(w.Title);
-				windowList.DropDownItems[windowList.DropDownItems.Count - 1].ToolTipText = w.WindowClass;
-			}
-		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Maximize the selected Window
-		/// </summary>
-		/// <param name="sender"></param>
-		/// <param name="e"></param>
-		private void DropDownClick(object sender, ToolStripItemClickedEventArgs e) {
-			string wClass = e.ClickedItem.ToolTipText;
-			string wTitle = e.ClickedItem.Text;
-			Maximize((IntPtr)0, wTitle, wClass);
 		}
 //--------------------------------------------------------------------------------------------
 		/// <summary>
