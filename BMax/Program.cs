@@ -33,7 +33,7 @@ namespace BMax {
 		static int BORDER_LEFT, BORDER_RIGHT, BORDER_TOP, BORDER_BOTTOM;
 		static List<Window> cWindows = new List<Window>();
 		static List<WindowData> savedWindows = new List<WindowData>();
-		static Rectangle bounds = System.Windows.Forms.Screen.PrimaryScreen.WorkingArea;
+		static Rectangle bounds = Screen.PrimaryScreen.Bounds;
 		static NotifyIcon trayIcon;
 		static ContextMenuStrip trayMenu;
 		static ToolStripMenuItem windowList, chkTaskbar;
