@@ -15,7 +15,7 @@ namespace BMax {
 			Application.EnableVisualStyles();
 			Application.Run(new BMaxApp());
 		}
-//--------------------------------------------------------------------------------------------
+		//--------------------------------------------------------------------------------------------
 		[StructLayout(LayoutKind.Sequential)]
 		public struct RECT {
 			public int Left; // x position of upper-left corner
@@ -23,24 +23,23 @@ namespace BMax {
 			public int Right; // x position of lower-right corner
 			public int Bottom; // y position of lower-right corner
 		}
-//--------------------------------------------------------------------------------------------
+		//--------------------------------------------------------------------------------------------
 		static bool CFG_KEEP_TASKBAR_VISIBLE = true;
 		static int CFG_BORDER_LEFT = 0;
 		static int CFG_BORDER_RIGHT = 0;
 		static int CFG_BORDER_TOP = 0;
 		static int CFG_BORDER_BOTTOM = 0;
-//--------------------------------------------------------------------------------------------
+		static bool CFG_USE_STRIP_METHOD = false;
+		//--------------------------------------------------------------------------------------------
 		static int BORDER_LEFT, BORDER_RIGHT, BORDER_TOP, BORDER_BOTTOM;
 		static List<Window> cWindows = new List<Window>();
-		static List<WindowData> savedWindows = new List<WindowData>();
+		static List<SavedWindow> savedWindows = new List<SavedWindow>();
+
 		static Rectangle bounds = Screen.PrimaryScreen.Bounds;
 		static NotifyIcon trayIcon;
 		static ContextMenuStrip trayMenu;
-		static ToolStripMenuItem windowList, chkTaskbar;
-/*
-		static Thread workerThread;
-*/
-//--------------------------------------------------------------------------------------------
+		static ToolStripMenuItem windowList, chkTaskbar, switchMethod, strip, resize;
+		//--------------------------------------------------------------------------------------------
 		[DllImport("user32.dll")]
 		static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
@@ -61,9 +60,15 @@ namespace BMax {
 		[DllImport("user32.dll", SetLastError = true)]
 		static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
+		[DllImport("user32.dll")]
+		static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+		[DllImport("user32.dll", SetLastError = true)]
+		internal static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+
 		[Flags()]
 		enum SetWindowPosFlags : uint {
-			SynchronousWindowPosition = 0x4000,
+			SynchronouswindowRectition = 0x4000,
 			DeferErase = 0x2000,
 			DrawFrame = 0x0020,
 			FrameChanged = 0x0020,
@@ -95,42 +100,72 @@ namespace BMax {
 			ShowDefault = 10,
 			ForceMinimize = 11
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Main entry point. Creates the tray icon, processes the options and starts the maximizing worker thread.
-		/// </summary>
+
+		//--------------------------------------------------------------------------------------------
+		public const int GCL_HICONSM = -34;
+		public const int GCL_HICON = -14;
+
+		public const int ICON_SMALL = 0;
+		public const int ICON_BIG = 1;
+		public const int ICON_SMALL2 = 2;
+
+		public const int WM_GETICON = 0x7F;
+
+		public static IntPtr GetClassLongPtr(IntPtr hWnd, int nIndex) {
+			if( IntPtr.Size > 4 )
+				return GetClassLongPtr64(hWnd, nIndex);
+			else
+				return new IntPtr(GetClassLongPtr32(hWnd, nIndex));
+		}
+
+		[DllImport("user32.dll", EntryPoint = "GetClassLong")]
+		public static extern uint GetClassLongPtr32(IntPtr hWnd, int nIndex);
+
+		[DllImport("user32.dll", EntryPoint = "GetClassLongPtr")]
+		public static extern IntPtr GetClassLongPtr64(IntPtr hWnd, int nIndex);
+
+		[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = false)]
+		static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+		//--------------------------------------------------------------------------------------------
 		private BMaxApp() {
-/*
-			ReadConfig(ref cWindows);
-*/
 			CreateIconAndMenus();
 			CalculateBorders();
-			//workerThread = new Thread(MainLoop);
-			//workerThread.Start();
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Create the systray icon and it's menu
-		/// </summary>
+		//--------------------------------------------------------------------------------------------
 		private void CreateIconAndMenus() {
 			trayMenu = new ContextMenuStrip();
 
-			windowList = new ToolStripMenuItem("&Active Windows");
+			windowList = new ToolStripMenuItem("&Toggle Maximize");
 			windowList.DropDownItems.Add("");
-			windowList.DropDown.ItemClicked += new ToolStripItemClickedEventHandler(DropDownClick);
+			windowList.DropDown.ItemClicked += new ToolStripItemClickedEventHandler(ToggleMaximized);
 			trayMenu.Items.Add(windowList);
 			trayMenu.Items[0].MouseEnter += new EventHandler(PopulateWindowList);
 
 			chkTaskbar = new ToolStripMenuItem("&Keep Taskbar visible");
 			chkTaskbar.Checked = CFG_KEEP_TASKBAR_VISIBLE;
 			chkTaskbar.CheckOnClick = true;
-			chkTaskbar.CheckedChanged += new EventHandler(ToggleTaskbar);
+			chkTaskbar.CheckedChanged += new EventHandler(chkTaskBar_clicked);
 			trayMenu.Items.Add(chkTaskbar);
+
+			switchMethod = new ToolStripMenuItem("&Switch maximizing method");
+
+			strip = new ToolStripMenuItem("&Strip window");
+			resize = new ToolStripMenuItem("&Resize window");
+
+			strip.Checked = CFG_USE_STRIP_METHOD;
+			resize.Checked = !CFG_USE_STRIP_METHOD;
+
+			strip.Click += new EventHandler(chkStrip_Clicked);
+			resize.Click += new EventHandler(chkResize_Clicked);
+
+			switchMethod.DropDownItems.Add(strip);
+			switchMethod.DropDownItems.Add(resize);
+			trayMenu.Items.Add(switchMethod);
 
 			trayMenu.Items.Add("-", null);
 			trayMenu.Items.Add("&Exit", null);
 
-			trayMenu.Items[3].Click += new EventHandler(Exit);
+			trayMenu.Items[4].Click += new EventHandler(Exit);
 
 			trayIcon = new NotifyIcon();
 			trayIcon.Text = "BMax";
@@ -138,39 +173,39 @@ namespace BMax {
 			trayIcon.ContextMenuStrip = trayMenu;
 			trayIcon.Visible = true;
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Populate the dropdown with entries for all current active windows
-		/// </summary>
-		/// <param name="sender"></param>
-		/// <param name="e"></param>
+		//--------------------------------------------------------------------------------------------
 		private void PopulateWindowList(object sender, EventArgs e) {
 			windowList.DropDownItems.Clear();
 			foreach( Window w in GetActiveWindows.Get() ) {
 				windowList.DropDownItems.Add(w.Title);
 				windowList.DropDownItems[windowList.DropDownItems.Count - 1].ToolTipText = w.WindowClass;
+				windowList.DropDownItems[windowList.DropDownItems.Count - 1].Image = GetAppIcon(w.handle).ToBitmap();
 			}
 		}
 
-		private void ToggleTaskbar(object sender, EventArgs e) {
+		private void chkStrip_Clicked(object sender, EventArgs e) {
+			CFG_USE_STRIP_METHOD = true;
+			strip.Checked = CFG_USE_STRIP_METHOD;
+			resize.Checked = !CFG_USE_STRIP_METHOD;
+		}
+
+		private void chkResize_Clicked(object sender, EventArgs e) {
+			CFG_USE_STRIP_METHOD = false;
+			strip.Checked = CFG_USE_STRIP_METHOD;
+			resize.Checked = !CFG_USE_STRIP_METHOD;
+		}
+
+		private void chkTaskBar_clicked(object sender, EventArgs e) {
 			CFG_KEEP_TASKBAR_VISIBLE = chkTaskbar.Checked;
 			CalculateBorders();
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Maximize the selected Window
-		/// </summary>
-		/// <param name="sender"></param>
-		/// <param name="e"></param>
-		private void DropDownClick(object sender, ToolStripItemClickedEventArgs e) {
+		//--------------------------------------------------------------------------------------------
+		private void ToggleMaximized(object sender, ToolStripItemClickedEventArgs e) {
 			string wClass = e.ClickedItem.ToolTipText;
 			string wTitle = e.ClickedItem.Text;
 			Maximize((IntPtr)0, wTitle, wClass);
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Calculate space to keep the taskbar visible
-		/// </summary>
+		//--------------------------------------------------------------------------------------------
 		private void CalculateBorders() {
 
 			BORDER_LEFT = CFG_BORDER_LEFT;
@@ -198,90 +233,14 @@ namespace BMax {
 				}
 			}
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Read the configuration from config.txt
-		/// </summary>
-		/// <param name="cWindows">List of configured Windows</param>
-/*
-		private static void ReadConfig(ref List<Window> cWindows) {
-			string file = "config.txt";
-
-			//write default config if no config exists
-			if( !File.Exists(file) ) {
-				string[] defaultCfg = {
-					"# BMax configuration file",
-					"# -----------------------",
-					"#",
-					"# Comment lines start with a hash symbol. To specifiy an application to",
-					"# be maximized, enter the exact window title, followed by a comma and the",
-					"# optional, but recommended, WindowClass.",
-					"Diablo III,D3 Main Window Class",
-					"Minecraft Launcher,SunAwtFrame",
-					"# You can also specify Windows without the WindowClass, but this can lead",
-					"# to false positives. The comma is omitted in this case.",
-					"Warcraft III",
-				};
-				File.WriteAllLines(file, defaultCfg);
-			}
-
-			// read config
-			string[] lines = File.ReadAllLines(file);
-			foreach( string line in lines ) {
-				if( line.StartsWith("#") )
-					continue; //ignore comments
-				string[] words = line.Split(',');
-				Window g = new Window();
-				if( words.Length > 1 ) {
-					g.Title = words[0];
-					g.WindowClass = words[1];
-					cWindows.Add(g);
-				} else if( words.Length == 1 ) {
-					g.Title = words[0];
-					g.WindowClass = "";
-					cWindows.Add(g);
-				}
-			}
-			return;
-		}
-*/
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Periodically look windows with a matching title/window class and maximize them
-		/// </summary>
-		///
-/*
-		private static void MainLoop() {
-			IntPtr wHandle = (IntPtr)0;
-			while( true ) {
-				foreach( Window g in cWindows ) {
-					wHandle = FindWindow(g.WindowClass, g.Title);
-					if( wHandle != (IntPtr)0 ) {
-						Maximize(wHandle);
-					}
-				}
-				Thread.Sleep(1000);
-			}
-		}
-*/
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Maximize the window
-		/// </summary>
-		/// <param name="wHandle">the HWND of the window</param>
-		/// <param name="wTitle">optional Window Title</param>
-		/// <param name="wClass">optional Window Class</param>
+		//--------------------------------------------------------------------------------------------
 		private static void Maximize(IntPtr wHandle, string wTitle = "", string wClass = "") {
-			if( wTitle != "" && wClass != "" ) wHandle = FindWindow(wClass, wTitle);
-			RECT r;
-			r.Left = bounds.Left;
-			r.Right = bounds.Right;
-			r.Top = bounds.Top;
-			r.Bottom = bounds.Bottom;
-			int wStyle = GetWindowLong(wHandle, -16);
+			if( wTitle != "" && wClass != "" )
+				wHandle = FindWindow(wClass, wTitle);
+
 			bool isMaximized = false;
 			int index = 0;
-			foreach( WindowData wd in savedWindows ) {
+			foreach( SavedWindow wd in savedWindows ) {
 				if( wd.handle == wHandle ) {
 					isMaximized = true;
 					break;
@@ -289,90 +248,120 @@ namespace BMax {
 				++index;
 			}
 
-			if( !isMaximized ) {
-				//save data for restoration
-				RECT wRect;
-				GetWindowRect(wHandle, out wRect);
-				WindowData w = new WindowData();
+			if ( isMaximized )
+			{
+					//restore style
+					SetWindowLong(wHandle, -16, savedWindows[index].windowStyle);
+					//restore position
+					SetWindowPos(wHandle, (IntPtr)(0),
+						savedWindows[index].windowRect.Left,
+						savedWindows[index].windowRect.Top,
+						savedWindows[index].windowRect.Right - savedWindows[index].windowRect.Left,
+						savedWindows[index].windowRect.Bottom - savedWindows[index].windowRect.Top,
+						(SetWindowPosFlags)0x0020);
+
+					ShowWindow(wHandle, (ShowWindowCommands)5);
+
+					MoveWindow(wHandle,
+						savedWindows[index].windowRect.Left,
+						savedWindows[index].windowRect.Top,
+						savedWindows[index].windowRect.Right - savedWindows[index].windowRect.Left,
+						savedWindows[index].windowRect.Bottom - savedWindows[index].windowRect.Top,
+						true);
+					savedWindows.RemoveAt(index);
+
+			} else {
+				//Save data
+				int wStyle = GetWindowLong(wHandle, -16);
+				RECT rWind;
+				GetWindowRect(wHandle, out rWind);
+
+				SavedWindow w = new SavedWindow();
 				w.handle = wHandle;
-				w.windowPos = wRect;
+				w.windowRect = rWind;
 				w.windowStyle = wStyle;
 				savedWindows.Add(w);
-				//set style
-				SetWindowLong(wHandle, -16, wStyle & ~(0x00040000 | 0x00C00000));
-				//maximize
-				SetWindowPos(wHandle, (IntPtr)(0),
-					r.Left + BORDER_LEFT,
-					r.Top + BORDER_TOP,
-					r.Right - BORDER_RIGHT - BORDER_LEFT,
-					r.Bottom - BORDER_BOTTOM - BORDER_TOP,
-					(SetWindowPosFlags)0x0020);
 
-				ShowWindow(wHandle, (ShowWindowCommands)5);
-			} else {
-				//restore style
-				SetWindowLong(wHandle, -16, savedWindows[index].windowStyle);
-				//restore position
-				SetWindowPos(wHandle, (IntPtr)(0),
-					savedWindows[index].windowPos.Left,
-					savedWindows[index].windowPos.Top,
-					savedWindows[index].windowPos.Right - savedWindows[index].windowPos.Left,
-					savedWindows[index].windowPos.Bottom - savedWindows[index].windowPos.Top,
-					(SetWindowPosFlags)0x0020);
+				if( CFG_USE_STRIP_METHOD ) {
+				//Strip Method
+					//SetWindowLong(wHandle, -16, wStyle & ~(0x00040000 | 0x00C00000));
+					SetWindowLong(wHandle, -16, wStyle & ~(0x00040000 | 0x00C00000));
 
-				ShowWindow(wHandle, (ShowWindowCommands)5);
-				savedWindows.RemoveAt(index);
+					int LEFT = bounds.Left + BORDER_LEFT;
+					int TOP = bounds.Top + BORDER_TOP;
+					int RIGHT = bounds.Right - BORDER_RIGHT - BORDER_LEFT;
+					int BOTTOM = bounds.Bottom - BORDER_BOTTOM - BORDER_TOP;
+
+					SetWindowPos(wHandle, (IntPtr)(0),	LEFT, TOP, RIGHT, BOTTOM, (SetWindowPosFlags)0x0020);
+
+					ShowWindow(wHandle, (ShowWindowCommands)5);
+				} else {
+				//Resize Method
+					RECT rClient;
+					GetWindowRect(wHandle, out rWind);
+					GetClientRect(wHandle, out rClient);
+					int border_thickness = ((rWind.Right - rWind.Left) - rClient.Right) / 2;
+					int titlebar_height = rWind.Bottom - rWind.Top - rClient.Bottom - border_thickness;
+
+					int LEFT = -border_thickness;
+					int TOP = -titlebar_height;
+					int RIGHT = bounds.Right + (border_thickness * 2);
+					int BOTTOM = bounds.Bottom - BORDER_BOTTOM + titlebar_height + border_thickness;
+
+					MoveWindow(wHandle, LEFT, TOP, RIGHT, BOTTOM, true);
+				}
 			}
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Hide the main form of the Application when loading
-		/// </summary>
-		/// <param name="e"></param>
+		//--------------------------------------------------------------------------------------------
 		protected override void OnLoad(EventArgs e) {
 			Visible = false;
 			ShowInTaskbar = false;
 			base.OnLoad(e);
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Dispose the tray icon
-		/// </summary>
-		/// <param name="isDisposing"></param>
+		//--------------------------------------------------------------------------------------------
 		protected override void Dispose(bool isDisposing) {
 			if( isDisposing )
 				trayIcon.Dispose();
 			base.Dispose(isDisposing);
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Exit the application and close all threads
-		/// </summary>
-		/// <param name="sender"></param>
-		/// <param name="e"></param>
+		//--------------------------------------------------------------------------------------------
 		private void Exit(object sender, EventArgs e) {
-			//workerThread.Abort();
 			Application.Exit();
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Helper Class
-		/// </summary>
+		//--------------------------------------------------------------------------------------------
 		public class Window {
 			public IntPtr handle;
 			public string Title;
 			public string WindowClass;
 		}
 
-		public class WindowData {
+		public class SavedWindow {
 			public IntPtr handle;
 			public int windowStyle;
-			public RECT windowPos;
+			public RECT windowRect;
 		}
-//--------------------------------------------------------------------------------------------
-		/// <summary>
-		/// Helper Class to get the list of all active Windows
-		/// </summary>
+
+		//--------------------------------------------------------------------------------------------
+		public Icon GetAppIcon(IntPtr hwnd)
+		{
+		  IntPtr iconHandle = SendMessage(hwnd,WM_GETICON,ICON_SMALL2,0);
+		  if(iconHandle == IntPtr.Zero)
+		    iconHandle = SendMessage(hwnd,WM_GETICON,ICON_SMALL,0);
+		  if(iconHandle == IntPtr.Zero)
+		    iconHandle = SendMessage(hwnd,WM_GETICON,ICON_BIG,0);
+		  if (iconHandle == IntPtr.Zero)
+		    iconHandle = GetClassLongPtr(hwnd, GCL_HICON);
+		  if (iconHandle == IntPtr.Zero)
+		    iconHandle = GetClassLongPtr(hwnd, GCL_HICONSM);
+
+		  if(iconHandle == IntPtr.Zero)
+		    return null;
+
+		  Icon icn = Icon.FromHandle(iconHandle);
+
+		  return icn;
+		}
+		//--------------------------------------------------------------------------------------------
 		public static class GetActiveWindows {
 			delegate bool EnumWindowsProc(IntPtr hWnd, int lParam);
 
