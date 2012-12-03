@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace BMax {
 	public class BMaxApp : Form {
@@ -50,7 +51,7 @@ namespace BMax {
 			return Icon.FromHandle(iconHandle);
 		}
 		//--------------------------------------------------------------------------------------------
-		static bool CFG_KEEP_TASKBAR_VISIBLE = true;
+		static bool CFG_KEEP_TASKBAR_VISIBLE;
 		static int CFG_BORDER_LEFT = 0;
 		static int CFG_BORDER_RIGHT = 0;
 		static int CFG_BORDER_TOP = 0;
@@ -63,6 +64,7 @@ namespace BMax {
 		static NotifyIcon trayIcon;
 		static ContextMenuStrip trayMenu;
 		static ToolStripMenuItem chkTaskbar;
+		static RegistryKey regKey;
 		//--------------------------------------------------------------------------------------------
 		delegate bool EnumWindowsProc(IntPtr hWnd, int lParam);
 
@@ -195,6 +197,17 @@ namespace BMax {
 			trayIcon.Text = "BMax";
 			trayIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 			trayIcon.Visible = true;
+			
+			Registry.LocalMachine.CreateSubKey("SOFTWARE\\BMax");
+			regKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\\BMax", true);
+			var key = regKey.GetValue("KeepTaskbarVisible");
+			if( key == null ) {
+				regKey.SetValue("KeepTaskbarVisible", 1, RegistryValueKind.DWord);
+				CFG_KEEP_TASKBAR_VISIBLE = true;
+			} else {
+				CFG_KEEP_TASKBAR_VISIBLE = Convert.ToBoolean(key);
+			}
+
 			trayIcon.ContextMenuStrip = CreateMenu();
 			CalculateBorders();
 		}
@@ -247,6 +260,7 @@ namespace BMax {
 		//--------------------------------------------------------------------------------------------
 		private void chkTaskBar_clicked(object sender, EventArgs e) {
 			CFG_KEEP_TASKBAR_VISIBLE = chkTaskbar.Checked;
+			regKey.SetValue("KeepTaskbarVisible", Convert.ToInt32(CFG_KEEP_TASKBAR_VISIBLE), RegistryValueKind.DWord);
 			CalculateBorders();
 		}
 		//--------------------------------------------------------------------------------------------
