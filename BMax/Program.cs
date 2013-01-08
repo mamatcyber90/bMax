@@ -36,16 +36,12 @@ namespace BMax {
 		}
 		//--------------------------------------------------------------------------------------------
 		public const int GCL_HICONSM = -34;
-		public const int GCL_HICON = -14;
 		public const int ICON_SMALL = 0;
-		public const int ICON_BIG = 1;
 		public const int ICON_SMALL2 = 2;
 		public const int WM_GETICON = 0x7F;
 		public Icon GetAppIcon(IntPtr hwnd) {
 			IntPtr iconHandle = SendMessage(hwnd, WM_GETICON, ICON_SMALL2, 0);
 			if( iconHandle == IntPtr.Zero )	iconHandle = SendMessage(hwnd, WM_GETICON, ICON_SMALL, 0);
-			if( iconHandle == IntPtr.Zero )	iconHandle = SendMessage(hwnd, WM_GETICON, ICON_BIG, 0);
-			if( iconHandle == IntPtr.Zero )	iconHandle = GetClassLongPtr(hwnd, GCL_HICON);
 			if( iconHandle == IntPtr.Zero )	iconHandle = GetClassLongPtr(hwnd, GCL_HICONSM);
 			if( iconHandle == IntPtr.Zero )	return null;
 			return Icon.FromHandle(iconHandle);
