@@ -1,5 +1,4 @@
 #bMax - borderless maximizer
-=============
 
 bMax is a small utility that can switch Windows applications into a fullscreen-like mode where the window's title bad and decorations (and optionally, the taskbar) are hidden. There are two distinct methods to achieve the effect:
 
