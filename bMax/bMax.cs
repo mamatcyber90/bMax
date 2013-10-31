@@ -14,15 +14,14 @@ namespace bMax {
             Application.EnableVisualStyles();
             Application.Run(new bMaxApp());
         }
-        //--------------------------------------------------------------------------------------------
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT {
-            public int Left; // x position of upper-left corner
-            public int Top; // y position of upper-left corner
-            public int Right; // x position of lower-right corner
+            public int Left;   // x position of upper-left corner
+            public int Top;    // y position of upper-left corner
+            public int Right;  // x position of lower-right corner
             public int Bottom; // y position of lower-right corner
         }
-        //--------------------------------------------------------------------------------------------
+
         public class Window {
             public IntPtr handle;
             public string Title;
@@ -34,25 +33,24 @@ namespace bMax {
             public int windowStyle;
             public RECT windowRect;
         }
-        //--------------------------------------------------------------------------------------------
+
         public const int GCL_HICONSM = -34;
         public const int ICON_SMALL = 0;
         public const int ICON_SMALL2 = 2;
         public const int WM_GETICON = 0x7F;
         public Icon GetAppIcon(IntPtr hwnd) {
             IntPtr iconHandle = SendMessage(hwnd, WM_GETICON, ICON_SMALL2, 0);
-            if( iconHandle == IntPtr.Zero ) iconHandle = SendMessage(hwnd, WM_GETICON, ICON_SMALL, 0);
-            if( iconHandle == IntPtr.Zero ) iconHandle = GetClassLongPtr(hwnd, GCL_HICONSM);
-            if( iconHandle == IntPtr.Zero ) return null;
+            if (iconHandle == IntPtr.Zero) iconHandle = SendMessage(hwnd, WM_GETICON, ICON_SMALL, 0);
+            if (iconHandle == IntPtr.Zero) iconHandle = GetClassLongPtr(hwnd, GCL_HICONSM);
+            if (iconHandle == IntPtr.Zero) return null;
             return Icon.FromHandle(iconHandle);
         }
-        //--------------------------------------------------------------------------------------------
+
         static bool CFG_KEEP_TASKBAR_VISIBLE;
         static int CFG_BORDER_LEFT = 0;
         static int CFG_BORDER_RIGHT = 0;
         static int CFG_BORDER_TOP = 0;
         static int CFG_BORDER_BOTTOM = 0;
-        //--------------------------------------------------------------------------------------------
         static int BORDER_LEFT, BORDER_RIGHT, BORDER_TOP, BORDER_BOTTOM;
         static List<Window> cWindows = new List<Window>();
         static List<SavedWindow> savedWindows = new List<SavedWindow>();
@@ -61,7 +59,7 @@ namespace bMax {
         static ContextMenuStrip trayMenu;
         static ToolStripMenuItem chkTaskbar;
         static RegistryKey regKey;
-        //--------------------------------------------------------------------------------------------
+
         delegate bool EnumWindowsProc(IntPtr hWnd, int lParam);
 
         [DllImport("user32.dll")]
@@ -151,24 +149,24 @@ namespace bMax {
             ShowDefault = 10,
             ForceMinimize = 11
         }
-        //--------------------------------------------------------------------------------------------
+
         public static IntPtr GetClassLongPtr(IntPtr hWnd, int nIndex) {
-            if( IntPtr.Size > 4 )
+            if (IntPtr.Size > 4)
                 return GetClassLongPtr64(hWnd, nIndex);
             else
                 return new IntPtr(GetClassLongPtr32(hWnd, nIndex));
         }
-        //--------------------------------------------------------------------------------------------
+
         public static List<Window> GetActiveWindows() {
             IntPtr lShellWindow = GetShellWindow();
             List<Window> windows = new List<Window>();
 
             EnumWindows(delegate(IntPtr hWnd, int lParam) {
-                if( hWnd == lShellWindow ) return true;
-                if( !IsWindowVisible(hWnd) ) return true;
+                if (hWnd == lShellWindow) return true;
+                if (!IsWindowVisible(hWnd)) return true;
 
                 int lLength = GetWindowTextLength(hWnd);
-                if( lLength == 0 ) return true;
+                if (lLength == 0) return true;
 
                 StringBuilder WindowTitle = new StringBuilder(lLength);
                 GetWindowText(hWnd, WindowTitle, lLength + 1);
@@ -185,7 +183,7 @@ namespace bMax {
             }, 0);
             return windows;
         }
-        //--------------------------------------------------------------------------------------------
+
         private bMaxApp() {
             trayMenu = new ContextMenuStrip();
             trayIcon = new NotifyIcon();
@@ -197,7 +195,7 @@ namespace bMax {
             Registry.LocalMachine.CreateSubKey("SOFTWARE\\bMax");
             regKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\\bMax", true);
             var key = regKey.GetValue("KeepTaskbarVisible");
-            if( key == null ) {
+            if (key == null) {
                 regKey.SetValue("KeepTaskbarVisible", 1, RegistryValueKind.DWord);
                 CFG_KEEP_TASKBAR_VISIBLE = true;
             } else {
@@ -207,15 +205,15 @@ namespace bMax {
             trayIcon.ContextMenuStrip = CreateMenu();
             CalculateBorders();
         }
-        //--------------------------------------------------------------------------------------------
+
         private void trayIcon_Click(object sender, EventArgs e) {
             this.ContextMenuStrip = CreateMenu();
         }
-        //--------------------------------------------------------------------------------------------
+
         private ContextMenuStrip CreateMenu() {
             trayMenu.Items.Clear();
 
-            foreach( Window w in GetActiveWindows() ) {
+            foreach (Window w in GetActiveWindows()) {
                 var item = new ToolStripMenuItem();
                 item.Text = w.Title.Length < 35 ? w.Title : w.Title.Substring(0, 35) + "...";
                 item.Image = GetAppIcon(w.handle).ToBitmap();
@@ -228,8 +226,8 @@ namespace bMax {
                 item.DropDownItems[1].Click += (s, a) => Maximize(w.handle, "strip");
                 item.DropDownItems[2].Click += (s, a) => Maximize(w.handle, "restore");
                 item.DropDownItems[2].Enabled = false;
-                foreach( SavedWindow sw in savedWindows ) {
-                    if( sw.handle == w.handle ) {
+                foreach (SavedWindow sw in savedWindows) {
+                    if (sw.handle == w.handle) {
                         item.DropDownItems[0].Enabled = false;
                         item.DropDownItems[1].Enabled = false;
                         item.DropDownItems[2].Enabled = true;
@@ -253,27 +251,26 @@ namespace bMax {
             return trayMenu;
         }
 
-        //--------------------------------------------------------------------------------------------
         private void chkTaskBar_clicked(object sender, EventArgs e) {
             CFG_KEEP_TASKBAR_VISIBLE = chkTaskbar.Checked;
             regKey.SetValue("KeepTaskbarVisible", Convert.ToInt32(CFG_KEEP_TASKBAR_VISIBLE), RegistryValueKind.DWord);
             CalculateBorders();
         }
-        //--------------------------------------------------------------------------------------------
+
         private void CalculateBorders() {
             BORDER_LEFT = CFG_BORDER_LEFT;
             BORDER_RIGHT = CFG_BORDER_RIGHT;
             BORDER_TOP = CFG_BORDER_TOP;
             BORDER_BOTTOM = CFG_BORDER_BOTTOM;
 
-            if( CFG_KEEP_TASKBAR_VISIBLE ) {
+            if (CFG_KEEP_TASKBAR_VISIBLE) {
                 IntPtr taskBar = FindWindow("Shell_TrayWnd", "");
                 RECT tr = new RECT();
                 GetWindowRect(taskBar, out tr);
 
-                if( tr.Left == bounds.Left ) {
-                    if( tr.Top == bounds.Top ) {
-                        if( tr.Right == bounds.Right ) {
+                if (tr.Left == bounds.Left) {
+                    if (tr.Top == bounds.Top) {
+                        if (tr.Right == bounds.Right) {
                             BORDER_TOP += tr.Bottom - tr.Top;
                         } else {
                             BORDER_LEFT += tr.Right - tr.Left;
@@ -286,12 +283,12 @@ namespace bMax {
                 }
             }
         }
-        //--------------------------------------------------------------------------------------------
+
         private static void Maximize(IntPtr wHandle, string action) {
-            if( action == "restore" ) {
+            if (action == "restore") {
                 int index = 0;
-                foreach( SavedWindow sw in savedWindows ) {
-                    if( sw.handle == wHandle ) break;
+                foreach (SavedWindow sw in savedWindows) {
+                    if (sw.handle == wHandle) break;
                     ++index;
                 }
 
@@ -314,7 +311,6 @@ namespace bMax {
                     savedWindows[index].windowRect.Bottom - savedWindows[index].windowRect.Top,
                     true);
                 savedWindows.RemoveAt(index);
-
             } else {
                 //save position and style for restoring
                 int wStyle = GetWindowLong(wHandle, -16);
@@ -327,7 +323,7 @@ namespace bMax {
                 w.windowStyle = wStyle;
                 savedWindows.Add(w);
 
-                if( action == "strip" ) {
+                if (action == "strip") {
                     SetWindowLong(wHandle, -16, wStyle & ~(0x00040000 | 0x00C00000));
 
                     int LEFT = bounds.Left + BORDER_LEFT;
@@ -339,8 +335,10 @@ namespace bMax {
                     ShowWindow(wHandle, (ShowWindowCommands)5);
                 } else if (action == "resize") {
                     RECT rClient;
+
                     GetWindowRect(wHandle, out rWind);
                     GetClientRect(wHandle, out rClient);
+
                     int border_thickness = ((rWind.Right - rWind.Left) - rClient.Right) / 2;
                     int titlebar_height = rWind.Bottom - rWind.Top - rClient.Bottom - border_thickness;
 
@@ -355,18 +353,18 @@ namespace bMax {
                 }
             }
         }
-        //--------------------------------------------------------------------------------------------
+
         protected override void OnLoad(EventArgs e) {
             Visible = false;
             ShowInTaskbar = false;
             base.OnLoad(e);
         }
-        //--------------------------------------------------------------------------------------------
+
         protected override void Dispose(bool isDisposing) {
-            if( isDisposing ) trayIcon.Dispose();
+            if (isDisposing) trayIcon.Dispose();
             base.Dispose(isDisposing);
         }
-        //--------------------------------------------------------------------------------------------
+
         private void Exit(object sender, EventArgs e) {
             Application.Exit();
         }
