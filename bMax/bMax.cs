@@ -8,37 +8,40 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 namespace bMax {
-    public class bMaxApp : Form {
+    class bMaxApp : Form {
         [STAThread]
-        static void Main() {
+        public static void Main() {
             Application.EnableVisualStyles();
             Application.Run(new bMaxApp());
         }
         [StructLayout(LayoutKind.Sequential)]
-        public struct RECT {
+        struct RECT {
             public int Left;   // x position of upper-left corner
             public int Top;    // y position of upper-left corner
             public int Right;  // x position of lower-right corner
             public int Bottom; // y position of lower-right corner
         }
 
-        public class Window {
+        class Window
+        {
             public IntPtr handle;
             public string Title;
             public string WindowClass;
         }
 
-        public class SavedWindow {
+        class SavedWindow
+        {
             public IntPtr handle;
             public int windowStyle;
             public RECT windowRect;
         }
 
-        public const int GCL_HICONSM = -34;
-        public const int ICON_SMALL = 0;
-        public const int ICON_SMALL2 = 2;
-        public const int WM_GETICON = 0x7F;
-        public Icon GetAppIcon(IntPtr hwnd) {
+        const int GCL_HICONSM = -34;
+        const int ICON_SMALL = 0;
+        const int ICON_SMALL2 = 2;
+        const int WM_GETICON = 0x7F;
+        Icon GetAppIcon(IntPtr hwnd)
+        {
             IntPtr iconHandle = SendMessage(hwnd, WM_GETICON, ICON_SMALL2, 0);
             if (iconHandle == IntPtr.Zero) iconHandle = SendMessage(hwnd, WM_GETICON, ICON_SMALL, 0);
             if (iconHandle == IntPtr.Zero) iconHandle = GetClassLongPtr(hwnd, GCL_HICONSM);
@@ -150,14 +153,14 @@ namespace bMax {
             ForceMinimize = 11
         }
 
-        public static IntPtr GetClassLongPtr(IntPtr hWnd, int nIndex) {
+        static IntPtr GetClassLongPtr(IntPtr hWnd, int nIndex) {
             if (IntPtr.Size > 4)
                 return GetClassLongPtr64(hWnd, nIndex);
             else
                 return new IntPtr(GetClassLongPtr32(hWnd, nIndex));
         }
 
-        public static List<Window> GetActiveWindows() {
+        static List<Window> GetActiveWindows() {
             IntPtr lShellWindow = GetShellWindow();
             List<Window> windows = new List<Window>();
 
@@ -184,7 +187,7 @@ namespace bMax {
             return windows;
         }
 
-        private bMaxApp() {
+        bMaxApp() {
             trayMenu = new ContextMenuStrip();
             trayIcon = new NotifyIcon();
             trayIcon.MouseClick += trayIcon_Click;
@@ -206,11 +209,11 @@ namespace bMax {
             CalculateBorders();
         }
 
-        private void trayIcon_Click(object sender, EventArgs e) {
+        void trayIcon_Click(object sender, EventArgs e) {
             this.ContextMenuStrip = CreateMenu();
         }
 
-        private ContextMenuStrip CreateMenu() {
+        ContextMenuStrip CreateMenu() {
             trayMenu.Items.Clear();
 
             foreach (Window w in GetActiveWindows()) {
@@ -251,13 +254,13 @@ namespace bMax {
             return trayMenu;
         }
 
-        private void chkTaskBar_clicked(object sender, EventArgs e) {
+        void chkTaskBar_clicked(object sender, EventArgs e) {
             CFG_KEEP_TASKBAR_VISIBLE = chkTaskbar.Checked;
             regKey.SetValue("KeepTaskbarVisible", Convert.ToInt32(CFG_KEEP_TASKBAR_VISIBLE), RegistryValueKind.DWord);
             CalculateBorders();
         }
 
-        private void CalculateBorders() {
+        void CalculateBorders() {
             BORDER_LEFT = CFG_BORDER_LEFT;
             BORDER_RIGHT = CFG_BORDER_RIGHT;
             BORDER_TOP = CFG_BORDER_TOP;
@@ -284,7 +287,7 @@ namespace bMax {
             }
         }
 
-        private static void Maximize(IntPtr wHandle, string action) {
+        static void Maximize(IntPtr wHandle, string action) {
             if (action == "restore") {
                 int index = 0;
                 foreach (SavedWindow sw in savedWindows) {
@@ -365,7 +368,7 @@ namespace bMax {
             base.Dispose(isDisposing);
         }
 
-        private void Exit(object sender, EventArgs e) {
+        void Exit(object sender, EventArgs e) {
             Application.Exit();
         }
     }
