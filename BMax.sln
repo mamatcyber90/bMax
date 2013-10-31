@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BMax", "BMax\BMax.csproj", "{01767E7E-F8DB-453C-85F9-DDB7AF9E77E1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "bMax", "bMax\bMax.csproj", "{01767E7E-F8DB-453C-85F9-DDB7AF9E77E1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

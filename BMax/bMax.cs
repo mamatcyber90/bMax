@@ -7,12 +7,12 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace BMax {
-    public class BMaxApp : Form {
+namespace bMax {
+    public class bMaxApp : Form {
         [STAThread]
         static void Main() {
             Application.EnableVisualStyles();
-            Application.Run(new BMaxApp());
+            Application.Run(new bMaxApp());
         }
         //--------------------------------------------------------------------------------------------
         [StructLayout(LayoutKind.Sequential)]
@@ -186,16 +186,16 @@ namespace BMax {
             return windows;
         }
         //--------------------------------------------------------------------------------------------
-        private BMaxApp() {
+        private bMaxApp() {
             trayMenu = new ContextMenuStrip();
             trayIcon = new NotifyIcon();
             trayIcon.MouseClick += trayIcon_Click;
-            trayIcon.Text = "BMax";
+            trayIcon.Text = "bMax";
             trayIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             trayIcon.Visible = true;
 
-            Registry.LocalMachine.CreateSubKey("SOFTWARE\\BMax");
-            regKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\\BMax", true);
+            Registry.LocalMachine.CreateSubKey("SOFTWARE\\bMax");
+            regKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\\bMax", true);
             var key = regKey.GetValue("KeepTaskbarVisible");
             if( key == null ) {
                 regKey.SetValue("KeepTaskbarVisible", 1, RegistryValueKind.DWord);
